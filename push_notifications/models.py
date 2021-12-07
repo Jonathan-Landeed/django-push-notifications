@@ -82,7 +82,7 @@ class GCMDeviceQuerySet(models.query.QuerySet):
 			return response
 
 
-class GCMDevice(Device):
+class AbstractGCMDevice(Device):
 	# device_id cannot be a reliable primary key as fragmentation between different devices
 	# can make it turn out to be null and such:
 	# http://android-developers.blogspot.co.uk/2011/03/identifying-app-installations.html
@@ -100,6 +100,7 @@ class GCMDevice(Device):
 
 	class Meta:
 		verbose_name = _("GCM device")
+		abstract = True
 
 	def send_message(self, message, **kwargs):
 		from .gcm import send_message as gcm_send_message
@@ -112,6 +113,10 @@ class GCMDevice(Device):
 			self.registration_id, data, self.cloud_message_type,
 			application_id=self.application_id, **kwargs
 		)
+
+class GCMDevice(AbstractGCMDevice):
+	class Meta:
+		verbose_name = _("GCM device")
 
 
 class APNSDeviceManager(models.Manager):
@@ -142,7 +147,7 @@ class APNSDeviceQuerySet(models.query.QuerySet):
 			return res
 
 
-class APNSDevice(Device):
+class AbstractAPNSDevice(Device):
 	device_id = models.UUIDField(
 		verbose_name=_("Device ID"), blank=True, null=True, db_index=True,
 		help_text="UDID / UIDevice.identifierForVendor()"
@@ -155,6 +160,7 @@ class APNSDevice(Device):
 
 	class Meta:
 		verbose_name = _("APNS device")
+		abstract = True
 
 	def send_message(self, message, creds=None, **kwargs):
 		from .apns import apns_send_message
@@ -165,6 +171,11 @@ class APNSDevice(Device):
 			application_id=self.application_id, creds=creds,
 			**kwargs
 		)
+
+
+class APNSDevice(AbstractGCMDevice):
+	class Meta:
+		verbose_name = _("APNS device")
 
 
 class WNSDeviceManager(models.Manager):
