@@ -70,7 +70,7 @@ def _fcm_send(data, content_type, application_id):
 	).read().decode("utf-8")
 
 
-def _cm_handle_response(registration_ids, response_data, cloud_type, application_id=None):
+def _cm_handle_response(cls, registration_ids, response_data, cloud_type, application_id=None):
 	response = response_data
 	if response.get("failure") or response.get("canonical_ids"):
 		ids_to_remove, old_new_ids = [], []
@@ -95,13 +95,13 @@ def _cm_handle_response(registration_ids, response_data, cloud_type, application
 				old_new_ids.append((registration_ids[index], new_id))
 
 		if ids_to_remove:
-			removed = GCMDevice.objects.filter(
+			removed = cls.objects.filter(
 				registration_id__in=ids_to_remove, cloud_message_type=cloud_type
 			)
 			removed.update(active=False)
 
 		for old_id, new_id in old_new_ids:
-			_cm_handle_canonical_id(new_id, old_id, cloud_type)
+			_cm_handle_canonical_id(cls, new_id, old_id, cloud_type)
 
 		if throw_error:
 			raise GCMError(response)
@@ -109,7 +109,7 @@ def _cm_handle_response(registration_ids, response_data, cloud_type, application
 
 
 def _cm_send_request(
-	registration_ids, data, cloud_type="GCM", application_id=None,
+	cls, registration_ids, data, cloud_type="GCM", application_id=None,
 	use_fcm_notifications=True, **kwargs
 ):
 	"""
@@ -161,21 +161,21 @@ def _cm_send_request(
 		))
 	else:
 		raise ImproperlyConfigured("cloud_type must be FCM or GCM not %s" % str(cloud_type))
-	return _cm_handle_response(registration_ids, response, cloud_type, application_id)
+	return _cm_handle_response(cls, registration_ids, response, cloud_type, application_id)
 
 
-def _cm_handle_canonical_id(canonical_id, current_id, cloud_type):
+def _cm_handle_canonical_id(cls, canonical_id, current_id, cloud_type):
 	"""
 	Handle situation when FCM server response contains canonical ID
 	"""
-	devices = GCMDevice.objects.filter(cloud_message_type=cloud_type)
+	devices = cls.objects.filter(cloud_message_type=cloud_type)
 	if devices.filter(registration_id=canonical_id, active=True).exists():
 		devices.filter(registration_id=current_id).update(active=False)
 	else:
 		devices.filter(registration_id=current_id).update(registration_id=canonical_id)
 
 
-def send_message(registration_ids, data, cloud_type, application_id=None, **kwargs):
+def safe_send_message(cls, registration_ids, data, cloud_type, application_id=None, **kwargs):
 	"""
 	Sends a FCM (or GCM) notification to one or more registration_ids. The registration_ids
 	can be a list or a single string. This will send the notification as json data.
@@ -202,11 +202,13 @@ def send_message(registration_ids, data, cloud_type, application_id=None, **kwar
 		ret = []
 		for chunk in _chunks(registration_ids, max_recipients):
 			ret.append(_cm_send_request(
-				chunk, data, cloud_type=cloud_type, application_id=application_id, **kwargs
+				cls, chunk, data, cloud_type=cloud_type, application_id=application_id, **kwargs
 			))
 		return ret[0] if len(ret) == 1 else ret
 	else:
-		return _cm_send_request(None, data, cloud_type=cloud_type, **kwargs)
+		return _cm_send_request(cls, None, data, cloud_type=cloud_type, **kwargs)
 
+def send_message(registration_ids, data, cloud_type, application_id=None, **kwargs):
+	safe_send_message(GCMDevice, registration_ids, data, cloud_type, application_id, **kwargs)
 
 send_bulk_message = send_message
